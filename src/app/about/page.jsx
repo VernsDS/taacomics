@@ -72,7 +72,7 @@ const tech = [
 
 const socials = [
   {
-    href: "https://whatsapp.com/channel/0029VbBjyjlJ93wa6hwSWa0p",
+    href: "https://whatsapp.com/channel/0029VbDjtYi29755pL2W2M2y",
     label: "WhatsApp Channel",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -81,7 +81,7 @@ const socials = [
     ),
   },
   {
-    href: "https://t.me/rAi_engine",
+    href: "https://t.me/rapzxoffcial",
     label: "Telegram",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -90,7 +90,7 @@ const socials = [
     ),
   },
   {
-    href: "https://www.tiktok.com/@r_hmtofc",
+    href: "https://www.tiktok.com/@veixz2ndkindsss",
     label: "TikTok",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -99,7 +99,7 @@ const socials = [
     ),
   },
   {
-    href: "https://github.com/rahmat-369",
+    href: "https://github.com/VernsDEV",
     label: "GitHub",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -108,7 +108,7 @@ const socials = [
     ),
   },
   {
-    href: "https://www.instagram.com/rahmt_nhw",
+    href: "https://www.instagram.com/rapgoodboyy",
     label: "Instagram",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -294,7 +294,7 @@ export default function AboutPage() {
                 <p className="text-sm font-bold text-white">ataa</p>
                 <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(245,158,11,0.13)", color: "#f59e0b" }}>Owner</span>
               </div>
-              <p className="text-[11px] mt-0.5" style={{ color: "#6b7280" }}>Maintainer</p>
+              <p className="text-[11px] mt-0.5" style={{ color: "#6b7280" }}>Junior Web Designer · UI/UX Enthusiast</p>
             </div>
           </div>
 

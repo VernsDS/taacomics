@@ -9,6 +9,7 @@ const ALLOWED = [
   "komiku.org",
   "komiku.to",
   "komikid.org",
+  "pstatic.net",
 ];
 
 function isAllowed(url) {
@@ -33,6 +34,7 @@ export async function GET(request) {
     try {
       const { hostname } = new URL(url);
       if (/(komiku|komikid)/.test(hostname)) referer = "https://komiku.org/";
+      else if (/pstatic\.net$/.test(hostname)) referer = "https://www.webtoons.com/";
     } catch {}
 
     const response = await fetch(url, {

@@ -11,6 +11,8 @@ const LEVEL_STYLE = {
 export default function AnnouncementBanner() {
   const [items, setItems] = useState([]);
   const [dismissed, setDismissed] = useState([]);
+  const [removing, setRemoving] = useState(false);
+  const [gone, setGone] = useState(false);
 
   useEffect(() => {
     try {
@@ -30,6 +32,16 @@ export default function AnnouncementBanner() {
     };
   }, []);
 
+  useEffect(() => {
+    if (items.length === 0) return;
+    const t1 = setTimeout(() => setRemoving(true), 15000);
+    const t2 = setTimeout(() => setGone(true), 15500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [items]);
+
   function dismiss(id) {
     const next = [...dismissed, id];
     setDismissed(next);
@@ -39,10 +51,17 @@ export default function AnnouncementBanner() {
   }
 
   const visible = items.filter((it) => !dismissed.includes(it.id)).slice(0, 3);
-  if (visible.length === 0) return null;
+  if (visible.length === 0 || gone) return null;
 
   return (
-    <div className="space-y-2">
+    <div
+      className="space-y-2"
+      style={{
+        opacity: removing ? 0 : 1,
+        transform: removing ? "translateY(-10px)" : "translateY(0)",
+        transition: "opacity 500ms ease, transform 500ms ease",
+      }}
+    >
       {visible.map((it) => {
         const s = LEVEL_STYLE[it.level] || LEVEL_STYLE.info;
         return (

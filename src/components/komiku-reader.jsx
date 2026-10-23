@@ -3,8 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 
-export default function KomikuReader({ title, images, prevHref, nextHref, backHref }) {
+export default function KomikuReader({ title, images, prevHref, nextHref, backHref, direct = false }) {
   const [loadError, setLoadError] = useState({});
+
+  const srcFor = (src, retry = false) => {
+    if (direct) return retry ? `${src}&r=${Date.now()}`.replace(/&$/, "?r=") : src;
+    return `/api/proxy/page?url=${encodeURIComponent(src)}${retry ? `&r=${Date.now()}` : ""}`;
+  };
 
   return (
     <div className="min-h-screen" style={{ background: "#080a0f" }}>
@@ -29,7 +34,7 @@ export default function KomikuReader({ title, images, prevHref, nextHref, backHr
                   onClick={() => {
                     setLoadError((prev) => ({ ...prev, [src]: false }));
                     const el = document.getElementById(`kc-img-${i}`);
-                    if (el) el.src = `/api/proxy/page?url=${encodeURIComponent(src)}&r=${Date.now()}`;
+                    if (el) el.src = srcFor(src, true);
                   }}
                   className="px-4 py-1.5 rounded-lg text-xs font-semibold"
                   style={{ background: "rgba(245,158,11,0.15)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.3)" }}
@@ -41,7 +46,7 @@ export default function KomikuReader({ title, images, prevHref, nextHref, backHr
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 id={`kc-img-${i}`}
-                src={`/api/proxy/page?url=${encodeURIComponent(src)}`}
+                src={srcFor(src)}
                 alt={`${title} halaman ${i + 1}`}
                 loading={i === 0 ? "eager" : "lazy"}
                 className="w-full block"

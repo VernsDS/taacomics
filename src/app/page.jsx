@@ -1,6 +1,7 @@
 ﻿import MangaCard from "@/components/manga-card";
 import HeroSlider from "@/components/HeroSlider";
 import AnnouncementBanner from "@/components/announcement-banner";
+import { filterBlocked } from "@/lib/blocklist";
 import Link from "next/link";
 
 const MDEX = "https://api.mangadex.org";
@@ -19,7 +20,8 @@ async function fetchManga(sort, limit = 18) {
       next: { revalidate: 300 },
     });
     const data = await res.json();
-    return data.data || [];
+    const { items } = filterBlocked(data.data || [], (m) => m?.attributes?.title?.en || Object.values(m?.attributes?.title || {})[0]);
+    return items;
   } catch {
     return [];
   }

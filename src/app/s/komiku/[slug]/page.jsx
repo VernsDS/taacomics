@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getKomikuDetail } from "@/lib/komiku";
+import { getCustomChaptersForSlug } from "@/lib/customChapters";
 
 export async function generateMetadata({ params }) {
   const { slug } = await params;
@@ -19,14 +20,38 @@ export default async function KomikuDetailPage({ params }) {
   const { slug } = await params;
 
   let detail;
+  let customChapters = [];
+  let customOnly = false;
   try {
     detail = await getKomikuDetail(slug);
   } catch {
-    notFound();
+    customChapters = getCustomChaptersForSlug(slug);
+    customOnly = customChapters.length > 0;
+    if (!customOnly) notFound();
+  }
+  if (!customOnly && detail) {
+    customChapters = getCustomChaptersForSlug(slug);
   }
 
-  const firstPath = detail.first?.path;
-  const latestPath = detail.latest?.path;
+  const mergedChapters = detail ? [...detail.chapters] : [];
+  for (const cc of customChapters) {
+    mergedChapters.push({ path: `custom-${cc.id}`, label: cc.label, date: "Chapter sendiri", custom: true });
+  }
+  const resolvedDetail = detail || {
+    slug,
+    title: slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    altTitle: null,
+    cover: null,
+    synopsis: "Manga custom - chapter ditambahkan admin.",
+    type: "Custom",
+    status: "Ongoing",
+    genres: [],
+    chapterCount: customChapters.length,
+    chapters: [],
+  };
+  resolvedDetail.chapterCount = mergedChapters.length;
+  const firstPath = mergedChapters[mergedChapters.length - 1]?.path;
+  const latestPath = mergedChapters[0]?.path;
 
   return (
     <div className="min-h-screen" style={{ background: "#080a0f" }}>
@@ -41,8 +66,8 @@ export default async function KomikuDetailPage({ params }) {
         <div className="rounded-3xl overflow-hidden mb-5" style={{ background: "#0d1018", border: "1px solid rgba(245,158,11,0.12)" }}>
           <div className="flex flex-col sm:flex-row gap-4 p-4 sm:p-5">
             <div className="w-32 sm:w-40 md:w-48 flex-shrink-0 mx-auto sm:mx-0">
-              {detail.cover ? (
-                <img src={detail.cover} alt={detail.title} className="w-full rounded-2xl object-cover" style={{ aspectRatio: "2/3" }} />
+              {resolvedDetail.cover ? (
+                <img src={resolvedDetail.cover} alt={resolvedDetail.title} className="w-full rounded-2xl object-cover" style={{ aspectRatio: "2/3" }} />
               ) : (
                 <div className="w-full rounded-2xl flex items-center justify-center text-gray-600 text-xs" style={{ aspectRatio: "2/3", background: "rgba(255,255,255,0.05)" }}>
                   Tanpa Cover
@@ -54,22 +79,27 @@ export default async function KomikuDetailPage({ params }) {
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-bold" style={{ background: "rgba(245,158,11,0.15)", color: "#fbbf24" }}>
                   KOMIKU MIRROR
                 </span>
-                {detail.type && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(59,130,246,0.15)", color: "#93c5fd" }}>
-                    {detail.type.toUpperCase()}
+                {customOnly && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(168,85,247,0.15)", color: "#d8b4fe" }}>
+                    CHAPTER SENDIRI
                   </span>
                 )}
-                {detail.status && (
+                {resolvedDetail.type && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(59,130,246,0.15)", color: "#93c5fd" }}>
+                    {resolvedDetail.type.toUpperCase()}
+                  </span>
+                )}
+                {resolvedDetail.status && (
                   <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80" }}>
-                    {detail.status.toUpperCase()}
+                    {resolvedDetail.status.toUpperCase()}
                   </span>
                 )}
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold text-white mb-1">{detail.title}</h1>
-              {detail.altTitle && <p className="text-xs text-gray-500 mb-3">{detail.altTitle}</p>}
-              {detail.genres.length > 0 && (
+              <h1 className="text-xl sm:text-2xl font-bold text-white mb-1">{resolvedDetail.title}</h1>
+              {resolvedDetail.altTitle && <p className="text-xs text-gray-500 mb-3">{resolvedDetail.altTitle}</p>}
+              {resolvedDetail.genres.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 justify-center sm:justify-start mb-4">
-                  {detail.genres.slice(0, 8).map((g) => (
+                  {resolvedDetail.genres.slice(0, 8).map((g) => (
                     <span key={g} className="text-[11px] px-2.5 py-1 rounded-full text-gray-300" style={{ background: "rgba(255,255,255,0.06)" }}>
                       {g}
                     </span>
@@ -79,16 +109,16 @@ export default async function KomikuDetailPage({ params }) {
               <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                 {latestPath && (
                   <Link
-                    href={`/s/komiku/${detail.slug}/${latestPath}`}
+                    href={`/s/komiku/${slug}/${latestPath}`}
                     className="text-sm font-bold px-5 py-2.5 rounded-xl transition-opacity hover:opacity-90"
                     style={{ background: "linear-gradient(135deg,#f59e0b,#fbbf24)", color: "#1f1400" }}
                   >
-                    Baca Terbaru {detail.latest ? `(${detail.latest.label})` : ""}
+                    Baca Terbaru {detail?.latest ? `(${detail.latest.label})` : ""}
                   </Link>
                 )}
                 {firstPath && (
                   <Link
-                    href={`/s/komiku/${detail.slug}/${firstPath}`}
+                    href={`/s/komiku/${slug}/${firstPath}`}
                     className="text-sm font-semibold px-5 py-2.5 rounded-xl text-gray-200 transition-opacity hover:opacity-80"
                     style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
                   >
@@ -99,10 +129,10 @@ export default async function KomikuDetailPage({ params }) {
             </div>
           </div>
 
-          {detail.synopsis && (
+          {resolvedDetail.synopsis && (
             <div className="px-4 sm:px-5 pb-5">
               <h2 className="text-sm font-bold mb-1.5" style={{ color: "#f59e0b" }}>Sinopsis</h2>
-              <p className="text-xs leading-relaxed text-gray-400">{detail.synopsis}</p>
+              <p className="text-xs leading-relaxed text-gray-400">{resolvedDetail.synopsis}</p>
             </div>
           )}
         </div>
@@ -112,22 +142,29 @@ export default async function KomikuDetailPage({ params }) {
             <h2 className="text-base font-bold text-white flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
               Daftar Chapter
-              <span className="text-xs font-normal text-gray-500">({detail.chapterCount})</span>
+              <span className="text-xs font-normal text-gray-500">({mergedChapters.length})</span>
             </h2>
           </div>
           <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-            {detail.chapters.map((ch) => (
+            {mergedChapters.map((ch) => (
               <Link
                 key={ch.path}
-                href={`/s/komiku/${detail.slug}/${ch.path}`}
+                href={`/s/komiku/${slug}/${ch.path}`}
                 className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-white/5"
                 style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
               >
-                <span className="text-sm font-medium text-gray-200">{ch.label}</span>
+                <span className="text-sm font-medium text-gray-200">
+                  {ch.label}
+                  {ch.custom && (
+                    <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: "rgba(168,85,247,0.15)", color: "#d8b4fe" }}>
+                      SENDIRI
+                    </span>
+                  )}
+                </span>
                 <span className="text-[11px] text-gray-500">{ch.date}</span>
               </Link>
             ))}
-            {detail.chapters.length === 0 && (
+            {mergedChapters.length === 0 && (
               <p className="text-gray-500 text-sm text-center py-8">Tidak ada chapter terscraper.</p>
             )}
           </div>

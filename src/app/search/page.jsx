@@ -27,6 +27,9 @@ function SearchContent() {
   const [mirrorItems, setMirrorItems] = useState([]);
   const [mirrorLoading, setMirrorLoading] = useState(false);
 
+  const [wtItems, setWtItems] = useState([]);
+  const [wtLoading, setWtLoading] = useState(false);
+
   useEffect(() => {
     async function fetchMirror(q) {
       if (!q) {
@@ -45,6 +48,26 @@ function SearchContent() {
       }
     }
     fetchMirror(qParam);
+  }, [qParam]);
+
+  useEffect(() => {
+    async function fetchWebtoons(q) {
+      if (!q) {
+        setWtItems([]);
+        return;
+      }
+      setWtLoading(true);
+      try {
+        const res = await fetch(`/api/webtoons/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        setWtItems(Array.isArray(data?.data) ? data.data : []);
+      } catch {
+        setWtItems([]);
+      } finally {
+        setWtLoading(false);
+      }
+    }
+    fetchWebtoons(qParam);
   }, [qParam]);
 
   const fetchResults = useCallback(async (q, s, off = 0) => {
@@ -202,6 +225,45 @@ function SearchContent() {
             </div>
           ) : (
             <p className="text-xs text-gray-500 py-3">Tidak ada hasil mirror untuk pencarian ini.</p>
+          )}
+        </section>
+      )}
+      {qParam && (
+        <section className="mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 0 20 15.3 15.3 0 0 1 0-20"/></svg>
+              Webtoons Mirror
+              <span className="text-[10px] font-normal px-2 py-0.5 rounded-full" style={{ background: "rgba(168,85,247,0.15)", color: "#d8b4fe" }}>OFFICIAL</span>
+            </h2>
+          </div>
+          {wtLoading ? (
+            <div className="flex justify-center py-6">
+              <div className="w-6 h-6 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+            </div>
+          ) : wtItems.length > 0 ? (
+            <div className="manga-grid">
+              {wtItems.map((m) => (
+                <Link
+                  key={m.slug}
+                  href={`/s/webtoons/${m.slug}`}
+                  className="group"
+                >
+                  <div className="rounded-2xl overflow-hidden transition-transform group-hover:scale-[1.03]" style={{ background: "#0d1018", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div className="relative" style={{ aspectRatio: "2/3", background: "rgba(255,255,255,0.04)" }}>
+                      {m.cover && <img src={m.cover} alt={m.title} loading="lazy" className="w-full h-full object-cover" />}
+                    </div>
+                    <div className="p-2.5">
+                      <p className="text-xs font-semibold text-white truncate">{m.title}</p>
+                      {m.author && <p className="text-[10px] mt-0.5" style={{ color: "#d8b4fe" }}>{m.author}</p>}
+                      <p className="text-[10px] text-gray-500">Webtoons · Original</p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 py-3">Tidak ada hasil Webtoons untuk pencarian ini.</p>
           )}
         </section>
       )}

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getKomikuChapter } from "@/lib/komiku";
+import { findCustomChapter } from "@/lib/customChapters";
 import KomikuReader from "@/components/komiku-reader";
 
 export async function generateMetadata({ params }) {
@@ -24,7 +25,21 @@ export default async function KomikuChapterPage({ params }) {
   try {
     data = await getKomikuChapter(chapter);
   } catch {
-    notFound();
+    const custom = findCustomChapter(slug, chapter);
+    if (custom && custom.images.length > 0) {
+      data = custom;
+    } else {
+      notFound();
+    }
+  }
+
+  if (!Array.isArray(data.images) || data.images.length === 0) {
+    const custom = findCustomChapter(slug, chapter);
+    if (custom && custom.images.length > 0) {
+      data = custom;
+    } else {
+      notFound();
+    }
   }
 
   const prevPath = data.prev ? sitePathToRoute(data.prev) : null;
@@ -39,6 +54,7 @@ export default async function KomikuChapterPage({ params }) {
       prevHref={prevHref}
       nextHref={nextHref}
       backHref={`/s/komiku/${slug}`}
+      direct={Boolean(data.direct)}
     />
   );
 }
