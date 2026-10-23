@@ -1,4 +1,4 @@
-export async function GET(request) {
+﻿export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const url = searchParams.get("url");
 
@@ -9,7 +9,7 @@ export async function GET(request) {
   try {
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "MangaRift/1.0",
+        "User-Agent": "TaaComics/1.0",
         "Referer": "https://mangadex.org",
       },
     });
@@ -32,3 +32,4 @@ export async function GET(request) {
     return new Response("Error fetching image", { status: 500 });
   }
 }
+

@@ -94,13 +94,13 @@ export default function Navbar() {
           {/* Brand */}
           <Link href="/" className="flex items-center gap-1 flex-shrink-0 mr-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "#000", padding: "2px" }}>
-              <img src="/icon.png" alt="MangaRift" className="w-full h-full object-contain rounded-md" />
+              <img src="/icon.png" alt="TaaComics" className="w-full h-full object-contain rounded-md" />
             </div>
             <span
               className="text-[17px] font-bold tracking-tight"
               style={{ background: "linear-gradient(135deg,#f59e0b,#fbbf24)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}
             >
-              angarift
+              taacomics
             </span>
           </Link>
 

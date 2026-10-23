@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 
 const FAA_YTPLAY_URL = "https://api-faa.my.id/faa/ytplay";
 const DEFAULT_QUERY = "Inni uhibbuka";
@@ -63,7 +63,7 @@ async function fetchFaaMusic(query) {
   const res = await fetch(url.toString(), {
     headers: {
       Accept: "application/json, text/plain, */*",
-      "User-Agent": "MangaRift/1.0 (+https://mangarift.app)",
+      "User-Agent": "TaaComics/1.0 (+https://ataamanga.web.id)"
     },
     cache: "no-store",
     signal: AbortSignal.timeout(15000),
@@ -107,3 +107,4 @@ export async function GET(request) {
     return corsJson({ status: false, error: e.message, query: q, results: [], resultCount: 0 }, { status: 200 });
   }
 }
+

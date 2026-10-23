@@ -1,9 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight } from "lucide-react";
+import { fetchChaptersForManga } from "@/lib/chapters";
 
 const MDEX = "https://api.mangadex.org";
-const HEADERS = { "User-Agent": "MangaRift/1.0" };
+const HEADERS = { "User-Agent": "TaaComics/1.0 (+https://ataamanga.web.id)" };
 
 function getTitle(manga) {
   const t = manga.attributes?.title;
@@ -35,19 +36,20 @@ const STATUS = {
 };
 
 async function getData(id) {
-  const [mangaRes, chaptersRes] = await Promise.all([
+  const [mangaRes, chapters] = await Promise.all([
     fetch(`${MDEX}/manga/${id}?includes[]=cover_art&includes[]=author&includes[]=artist`, {
       headers: HEADERS, next: { revalidate: 600 },
     }),
-    fetch(
-      `${MDEX}/manga/${id}/feed?limit=500&translatedLanguage[]=en&order[chapter]=asc&includes[]=scanlation_group`,
-      { headers: HEADERS, next: { revalidate: 300 } }
-    ),
+    fetchChaptersForManga(id),
   ]);
   return {
     manga: await mangaRes.json(),
-    chapters: await chaptersRes.json(),
+    chapters,
   };
+}
+
+function dedupeChapters(list) {
+  return list || [];
 }
 
 export async function generateMetadata({ params }) {
@@ -58,8 +60,8 @@ export async function generateMetadata({ params }) {
       { headers: HEADERS, next: { revalidate: 600 } }
     );
     const data = await res.json();
-    return { title: `${getTitle(data.data)} — MangaRift` };
-  } catch { return { title: "MangaRift" }; }
+    return { title: `${getTitle(data.data)} - TaaComics` };
+  } catch { return { title: "TaaComics" }; }
 }
 
 export default async function MangaDetailPage({ params }) {
@@ -81,7 +83,7 @@ export default async function MangaDetailPage({ params }) {
 
   const title   = getTitle(manga);
   const cover   = getCover(manga);
-  const desc    = manga.attributes?.description?.en || Object.values(manga.attributes?.description || {})[0] || "";
+  const desc    = manga.attributes?.description?.id || manga.attributes?.description?.en || Object.values(manga.attributes?.description || {})[0] || "";
   const status  = manga.attributes?.status;
   const statusInfo = STATUS[status] || { label: status || "Unknown", color: "#6b7280" };
   const authors = getAuthors(manga);
@@ -93,7 +95,7 @@ export default async function MangaDetailPage({ params }) {
   const typeLabel = lang === "ko" ? "Manhwa 🇰🇷" : lang === "zh" || lang === "zh-hk" ? "Manhua 🇨🇳" : "Manga 🇯🇵";
   const year   = manga.attributes?.year;
   const rating = manga.attributes?.rating?.bayesian?.toFixed(1);
-  const chapters = chaptersData?.data || [];
+  const chapters = chaptersData;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -186,7 +188,7 @@ export default async function MangaDetailPage({ params }) {
           <div style={{ maxHeight: "450px", overflowY: "auto" }}>
             {chapters.length === 0 ? (
               <div className="text-center py-8 text-sm" style={{ color: "#6b7280" }}>
-                Belum ada chapter tersedia (Bahasa Inggris)
+                Belum ada chapter tersedia (Indonesia/English)
               </div>
             ) : (
               [...chapters].reverse().map((ch) => {
@@ -208,7 +210,7 @@ export default async function MangaDetailPage({ params }) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-200 group-hover:text-indigo-300 transition-colors truncate">
                         Ch.{chNum || "?"}
-                        {chTitle ? ` — ${chTitle}` : ""}
+                        {chTitle ? ` - ${chTitle}` : ""}
                       </p>
                       <p className="text-[10px] mt-0.5" style={{ color: "#4b5563" }}>
                         {group || "Unknown"} · {pages || 0} hal · {date}

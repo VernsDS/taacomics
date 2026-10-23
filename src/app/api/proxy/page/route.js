@@ -1,10 +1,14 @@
-export const runtime = "edge";
+﻿export const runtime = "edge";
 
 // Allowed domains for manga page images
 const ALLOWED = [
   "uploads.mangadex.org",
   "mangadex.network",
   "cmdxd98sb0x3yprd.mangadex.network",
+  // Komiku mirror (img.komiku.org, thumbnail.komiku.org/.to, update.komikid.org)
+  "komiku.org",
+  "komiku.to",
+  "komikid.org",
 ];
 
 function isAllowed(url) {
@@ -25,10 +29,16 @@ export async function GET(request) {
   }
 
   try {
+    let referer = "https://mangadex.org";
+    try {
+      const { hostname } = new URL(url);
+      if (/(komiku|komikid)/.test(hostname)) referer = "https://komiku.org/";
+    } catch {}
+
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "MangaRift/1.0",
-        Referer: "https://mangadex.org",
+        "User-Agent": "TaaComics/1.0",
+        Referer: referer,
       },
     });
 
@@ -51,3 +61,4 @@ export async function GET(request) {
     return new Response("Proxy error", { status: 500 });
   }
 }
+

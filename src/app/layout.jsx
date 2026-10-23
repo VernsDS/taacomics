@@ -5,19 +5,20 @@ import MusicPlayer from "@/components/music-player";
 import { Toaster } from "sonner";
 
 export const metadata = {
-  title: "MangaRift — Baca Manga, Manhua & Manhwa",
-  description: "Platform baca manga, manhua, dan manhwa gratis dengan koleksi terlengkap. Update setiap hari. By R_hmt.",
+  metadataBase: new URL("https://ataamanga.web.id"),
+  title: "TaaComics - Baca Manga, Manhua & Manhwa",
+  description: "Platform baca manga, manhua, dan manhwa gratis dengan koleksi terlengkap. Update setiap hari.",
   manifest: "/manifest.json",
   openGraph: {
-    title: "MangaRift — Baca Manga, Manhua & Manhwa Gratis",
+    title: "TaaComics - Baca Manga, Manhua & Manhwa Gratis",
     description: "Baca manga, manhua, dan manhwa terbaru gratis. Koleksi lengkap, cepat & ringan.",
-    images: [{ url: "/banner.png", width: 1500, height: 500, alt: "MangaRift Banner" }],
+    images: [{ url: "/banner.png", width: 1500, height: 500, alt: "TaaComics Banner" }],
     type: "website",
-    siteName: "MangaRift",
+    siteName: "TaaComics",
   },
   twitter: {
     card: "summary_large_image",
-    title: "MangaRift — Baca Manga Gratis",
+    title: "TaaComics - Baca Manga Gratis",
     description: "Platform baca manga, manhua, dan manhwa gratis terlengkap.",
     images: ["/banner.png"],
   },
@@ -30,7 +31,7 @@ export default function RootLayout({ children }) {
         <meta name="theme-color" content="#f59e0b" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="MangaRift" />
+        <meta name="apple-mobile-web-app-title" content="TaaComics" />
         <meta name="mobile-web-app-capable" content="yes" />
         {/* favicon.png (ada latar belakang) — untuk Add to Home Screen & bookmark */}
         <link rel="apple-touch-icon" href="/favicon.png" />

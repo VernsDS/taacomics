@@ -1,5 +1,6 @@
-import MangaCard from "@/components/manga-card";
+﻿import MangaCard from "@/components/manga-card";
 import HeroSlider from "@/components/HeroSlider";
+import AnnouncementBanner from "@/components/announcement-banner";
 import Link from "next/link";
 
 const MDEX = "https://api.mangadex.org";
@@ -14,7 +15,7 @@ async function fetchManga(sort, limit = 18) {
     p.append("contentRating[]", "suggestive");
     p.append(`order[${sort}]`, "desc");
     const res = await fetch(`${MDEX}/manga?${p}`, {
-      headers: { "User-Agent": "MangaRift/1.0" },
+      headers: { "User-Agent": "TaaComics/1.0" },
       next: { revalidate: 300 },
     });
     const data = await res.json();
@@ -33,6 +34,9 @@ export default async function HomePage() {
 
   return (
     <div>
+      <div className="max-w-5xl mx-auto px-4 pt-3">
+        <AnnouncementBanner />
+      </div>
       <HeroSlider heroes={topRated} />
       <div className="max-w-5xl mx-auto px-4 pt-4 pb-4 space-y-8">
         <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
@@ -88,3 +92,4 @@ export default async function HomePage() {
     </div>
   );
 }
+

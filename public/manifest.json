@@ -1,7 +1,7 @@
 {
-  "name": "MangaRift",
-  "short_name": "MangaRift",
-  "description": "Baca Manga, Manhua & Manhwa gratis — by R_hmt",
+  "name": "TaaComics",
+  "short_name": "TaaComics",
+  "description": "Baca Manga, Manhua & Manhwa gratis — taacomics",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#080a0f",
@@ -9,6 +9,6 @@
   "icons": [
     { "src": "/favicon.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/favicon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/favicon.png", "sizes": "1254x1254", "type": "image/png", "purpose": "maskable" }
+    { "src": "/favicon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

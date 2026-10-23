@@ -1,4 +1,4 @@
-const CORS_HEADERS = {
+﻿const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Range",
@@ -45,7 +45,7 @@ export async function GET(request) {
     const upstream = await fetch(audioUrl, {
       headers: {
         Accept: "audio/*,*/*;q=0.8",
-        "User-Agent": "MangaRift/1.0 (+https://mangarift.app)",
+        "User-Agent": "TaaComics/1.0 (+https://ataamanga.web.id)",
         ...(range ? { Range: range } : {}),
       },
       cache: "no-store",
@@ -67,3 +67,4 @@ export async function GET(request) {
     return Response.json({ error: error.message }, { status: 502, headers: CORS_HEADERS });
   }
 }
+

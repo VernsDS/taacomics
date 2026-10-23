@@ -1,0 +1,7 @@
+# TaaComics - https://ataamanga.web.id
+User-agent: *
+Allow: /
+Disallow: /admn67888820909
+Disallow: /api/admin/
+
+Sitemap: https://ataamanga.web.id/sitemap.xml

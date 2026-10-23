@@ -55,6 +55,8 @@ export default function ChapterReader() {
   const [showLangPicker, setShowLangPicker] = useState(false);
   // Track which pages have been translated (for cache key)
   const [translateKey, setTranslateKey] = useState(0);
+  const [externalUrl, setExternalUrl] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -65,9 +67,14 @@ export default function ChapterReader() {
       try {
         const res = await fetch(`/api/chapter/${chapterId}`);
         const data = await res.json();
-        if (data.chapter) {
+        setExternalUrl(data.chapter?.externalUrl || data.externalUrl || null);
+        if (data.chapter?.data?.length) {
           const { baseUrl, chapter } = data;
-          setPages(chapter.data.map((f) => `${baseUrl}/data/${chapter.hash}/${f}`));
+          setPages(
+            chapter.data.map((f) =>
+              `/api/proxy/page?url=${encodeURIComponent(`${baseUrl}/data/${chapter.hash}/${f}`)}`
+            )
+          );
           setCurrentChapter(data.chapter);
           // Save reading history to localStorage
           try {
@@ -91,7 +98,7 @@ export default function ChapterReader() {
       finally { setLoading(false); }
     }
     load();
-  }, [chapterId]);
+  }, [chapterId, reloadKey]);
 
   useEffect(() => {
     async function loadChapters() {
@@ -420,7 +427,7 @@ export default function ChapterReader() {
                   >
                     {isActive && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mr-2 flex-shrink-0" />}
                     Chapter {ch.attributes?.chapter || "?"}
-                    {ch.attributes?.title ? ` — ${ch.attributes.title}` : ""}
+                    {ch.attributes?.title ? ` - ${ch.attributes.title}` : ""}
                   </Link>
                 );
               })}
@@ -492,10 +499,32 @@ export default function ChapterReader() {
       )}
 
       {!loading && pages.length === 0 && (
-        <div className="flex flex-col items-center justify-center min-h-screen gap-3">
+        <div className="flex flex-col items-center justify-center min-h-screen gap-3 px-4">
           <p className="text-4xl">😢</p>
-          <p className="text-gray-400 text-sm">Halaman tidak bisa dimuat</p>
-          <Link href={`/manga/${mangaId}`} className="text-indigo-400 text-sm">← Kembali</Link>
+          <p className="text-gray-400 text-sm text-center">Halaman tidak bisa dimuat (mungkin terlalu banyak request, coba lagi)</p>
+          <div className="flex gap-2 flex-wrap justify-center">
+            <button
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="text-xs font-semibold px-4 py-2 rounded-xl text-white"
+              style={{ background: "linear-gradient(135deg,#6366f1,#818cf8)" }}
+            >
+              ↻ Coba Lagi
+            </button>
+            {externalUrl && (
+              <a
+                href={externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold px-4 py-2 rounded-xl text-white"
+                style={{ background: "rgba(255,255,255,0.1)" }}
+              >
+                Buka di Sumber Asli ↗
+              </a>
+            )}
+            <Link href={`/manga/${mangaId}`} className="text-xs font-semibold px-4 py-2 rounded-xl text-indigo-300" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+              ← Kembali
+            </Link>
+          </div>
         </div>
       )}
     </div>

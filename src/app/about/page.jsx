@@ -155,7 +155,7 @@ export default function AboutPage() {
           <div className="relative" style={{ height: "160px" }}>
             <img
               src="/banner.png"
-              alt="MangaRift Banner"
+              alt="TaaComics Banner"
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, rgba(13,16,24,0.85) 100%)" }} />
@@ -166,7 +166,7 @@ export default function AboutPage() {
                 className="w-20 h-20 rounded-2xl overflow-hidden"
                 style={{ border: "3px solid #0d1018", boxShadow: "0 8px 32px rgba(245,158,11,0.3)", background: "#080a0f" }}
               >
-                <img src="/favicon.png" alt="MangaRift" className="w-full h-full object-cover" />
+                <img src="/favicon.png" alt="TaaComics" className="w-full h-full object-cover" />
               </div>
             </div>
           </div>
@@ -177,7 +177,7 @@ export default function AboutPage() {
               className="text-2xl font-bold mb-1"
               style={{ background: "linear-gradient(135deg,#f59e0b,#fbbf24)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}
             >
-              MangaRift
+              TaaComics
             </h1>
             <p className="text-xs mb-1" style={{ color: "#6b7280" }}>v1.0.0 · Platform Baca Manga, Manhua &amp; Manhwa</p>
             <p className="text-sm leading-relaxed mb-5 max-w-xs" style={{ color: "#9ca3af" }}>
@@ -248,7 +248,7 @@ export default function AboutPage() {
             Tentang Project
           </h2>
           <p className="text-sm leading-relaxed" style={{ color: "#9ca3af" }}>
-            <span className="text-white font-medium">MangaRift</span> adalah platform baca manga berbasis web yang memanfaatkan{" "}
+            <span className="text-white font-medium">TaaComics</span> adalah platform baca manga berbasis web yang memanfaatkan{" "}
             <span style={{ color: "#f59e0b" }}>MangaDex API</span> — database manga terbesar dengan 50.000+ judul dari seluruh dunia.
             Dirancang mobile-first dengan fokus pada kecepatan, kemudahan navigasi, dan pengalaman baca yang nyaman.
           </p>
@@ -276,7 +276,7 @@ export default function AboutPage() {
             Disclaimer
           </h2>
           <p className="text-xs leading-relaxed" style={{ color: "#9ca3af" }}>
-            MangaRift tidak menyimpan konten manga di server kami. Semua data bersumber langsung dari MangaDex. Dibuat untuk tujuan edukasi &amp; pengembangan skill.
+            TaaComics tidak menyimpan konten manga di server kami. Semua data bersumber langsung dari MangaDex. Dibuat untuk tujuan edukasi &amp; pengembangan skill.
           </p>
         </div>
 
@@ -291,10 +291,10 @@ export default function AboutPage() {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-bold text-white">R_hmt ofc</p>
+                <p className="text-sm font-bold text-white">ataa</p>
                 <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(245,158,11,0.13)", color: "#f59e0b" }}>Owner</span>
               </div>
-              <p className="text-[11px] mt-0.5" style={{ color: "#6b7280" }}>Lead Developer &amp; UI/UX Designer</p>
+              <p className="text-[11px] mt-0.5" style={{ color: "#6b7280" }}>Maintainer</p>
             </div>
           </div>
 
@@ -320,9 +320,10 @@ export default function AboutPage() {
 
         {/* Footer */}
         <div className="text-center py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-          <p className="text-[11px]" style={{ color: "#374151" }}>© 2026 R_hmt ofc · MangaRift · Built with Next.js &amp; Vercel</p>
+          <p className="text-[11px]" style={{ color: "#374151" }}>© 2026 ataa · TaaComics · Built with Next.js &amp; Vercel</p>
         </div>
       </div>
     </div>
   );
 }
+
