@@ -24,11 +24,94 @@ export default function MusicPlayer() {
   const [searching, setSearching] = useState(false);
   const [audioError, setAudioError] = useState(null);
   const [pos, setPos] = useState(null);
+  const [mode, setMode] = useState("audio"); // "audio" | "yt"
+  const [ytApiReady, setYtApiReady] = useState(false);
   const audioRef = useRef(null);
   const btnRef = useRef(null);
   const dragData = useRef({ active: false, moved: false, sx: 0, sy: 0, bx: 0, by: 0 });
 
+  // YouTube IFrame player refs
+  const ytContainerRef = useRef(null);
+  const ytRef = useRef(null);
+  const ytReadyRef = useRef(false);
+  const ytEndedHandlerRef = useRef(null);
+
   const hide = pathname === "/about" || pathname?.startsWith("/search");
+
+  /* ---------- Muat YouTube IFrame API (dipakai sebagai fallback pemutaran) ---------- */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.YT && window.YT.Player) {
+      setYtApiReady(true);
+      return;
+    }
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof prev === "function") prev();
+      setYtApiReady(true);
+    };
+    const s = document.createElement("script");
+    s.src = "https://www.youtube.com/iframe_api";
+    s.async = true;
+    document.head.appendChild(s);
+  }, []);
+
+  // Buat player sekali setelah API siap & container ada
+  useEffect(() => {
+    if (!ytApiReady || ytRef.current || !window.YT || !ytContainerRef.current) return;
+    try {
+      ytRef.current = new window.YT.Player(ytContainerRef.current, {
+        height: "0",
+        width: "0",
+        videoId: "",
+        playerVars: { autoplay: 0, controls: 0, playsinline: 1, disablekb: 1, rel: 0 },
+        events: {
+          onReady: () => {
+            ytReadyRef.current = true;
+          },
+          onStateChange: (e) => {
+            const PlayerState = window.YT.PlayerState;
+            if (e.data === PlayerState.PLAYING) setIsPlaying(true);
+            else if (e.data === PlayerState.PAUSED) setIsPlaying(false);
+            else if (e.data === PlayerState.ENDED) {
+              setIsPlaying(false);
+              setProgress(0);
+              setCurrentTime(0);
+              if (ytEndedHandlerRef.current) ytEndedHandlerRef.current();
+            }
+          },
+        },
+      });
+    } catch (err) {
+      console.warn("YT player init failed", err);
+    }
+  }, [ytApiReady]);
+
+  // Poll progres saat mode YouTube
+  useEffect(() => {
+    if (mode !== "yt") return;
+    const id = setInterval(() => {
+      const p = ytRef.current;
+      if (p && typeof p.getCurrentTime === "function" && typeof p.getDuration === "function") {
+        try {
+          const cur = p.getCurrentTime() || 0;
+          const dur = p.getDuration() || 0;
+          setCurrentTime(cur);
+          setDuration(dur);
+          setProgress(dur ? cur / dur : 0);
+        } catch {}
+      }
+    }, 250);
+    return () => clearInterval(id);
+  }, [mode]);
+
+  // Selalu arahkan handler "ended" YouTube ke fungsi terbaru
+  useEffect(() => {
+    ytEndedHandlerRef.current = () => {
+      const idx = tracks.findIndex((t) => pickedTrack && t.id === pickedTrack.id);
+      if (idx !== -1 && tracks[idx + 1]) resolveAndPlay(tracks[idx + 1]);
+    };
+  });
 
   /* ---------- Search: daftar hasil dari YouTube ---------- */
   const doSearch = useCallback(async (q) => {
@@ -51,12 +134,45 @@ export default function MusicPlayer() {
     }
   }, []);
 
-  /* ---------- Resolve: ambil mp3 untuk lagu terpilih lewat /api/music ---------- */
+  /* ---------- Pemutaran via YouTube IFrame (fallback) ---------- */
+  const playViaYouTube = useCallback(async (track) => {
+    if (!track?.id) {
+      setAudioError("Lagu ini tidak dapat diputar. Coba lagu lain.");
+      setIsPlaying(false);
+      return;
+    }
+    // tunggu API bila belum siap
+    for (let i = 0; i < 20 && (!ytRef.current || !ytReadyRef.current); i++) {
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    if (!ytRef.current) {
+      setAudioError("Pemutar belum siap. Coba lagi.");
+      setIsPlaying(false);
+      return;
+    }
+    setMode("yt");
+    try {
+      ytRef.current.loadVideoById(track.id);
+      ytRef.current.playVideo();
+      setIsPlaying(true);
+      setProgress(0);
+      setCurrentTime(0);
+      setDuration(track.duration || 0);
+    } catch (err) {
+      console.error("YT play err", err);
+      setAudioError("Gagal memutar lagu ini. Coba lagu lain.");
+      setIsPlaying(false);
+    }
+  }, []);
+
+  /* ---------- Resolve: ambil mp3 utk lagu terpilih lewat /api/music ---------- */
   const resolveAndPlay = useCallback(async (track) => {
     if (!track) return;
     setPickedTrack(track);
     setResolving(true);
     setAudioError(null);
+    // hentikan pemutar YouTube bila sedang dipakai
+    try { if (mode === "yt") ytRef.current?.stopVideo?.(); } catch {}
     try {
       const q = [track.title, track.author].filter(Boolean).join(" ");
       const params = new URLSearchParams({ q });
@@ -65,21 +181,22 @@ export default function MusicPlayer() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const resolved = data.result || data.results?.[0];
-      if (!resolved?.streamUrl) throw new Error("no mp3");
+      if (!resolved?.streamUrl && !resolved?.previewUrl && !resolved?.mp3) throw new Error("no mp3");
+      setMode("audio");
       setCurrentTrack({ ...resolved, searchTitle: track.title, searchAuthor: track.author });
     } catch (e) {
-      console.error("music resolve err", e);
+      console.warn("audio resolve failed, fallback ke YouTube embed", e);
       setCurrentTrack(null);
-      setAudioError("Gagal memuat audio lagu ini. Coba lagu lain.");
+      await playViaYouTube(track);
     } finally {
       setResolving(false);
     }
-  }, []);
+  }, [mode, playViaYouTube]);
 
-  /* ---------- Auto-play saat lagu selesai di-resolve ---------- */
+  /* ---------- Auto-play saat lagu selesai di-resolve (mode audio) ---------- */
   useEffect(() => {
     const audio = audioRef.current;
-    if (!currentTrack || !audio) return;
+    if (mode !== "audio" || !currentTrack || !audio) return;
     const audioUrl = currentTrack.streamUrl || currentTrack.previewUrl || currentTrack.mp3;
     if (!audioUrl) return;
     setAudioError(null);
@@ -92,7 +209,7 @@ export default function MusicPlayer() {
     setProgress(0);
     setCurrentTime(0);
     setDuration(0);
-  }, [currentTrack]);
+  }, [currentTrack, mode]);
 
   /* ---------- Audio listeners ---------- */
   useEffect(() => {
@@ -107,16 +224,22 @@ export default function MusicPlayer() {
       setIsPlaying(false);
       setProgress(0);
       setCurrentTime(0);
-      // Auto next dalam daftar
       const idx = tracks.findIndex((t) => pickedTrack && t.id === pickedTrack.id);
       if (idx !== -1 && tracks[idx + 1]) resolveAndPlay(tracks[idx + 1]);
     };
     const onError = () => {
-      // Fallback: URL mp3 mentah kalau proxy stream gagal
-      if (currentTrack?.mp3 && !audio.src.endsWith(encodeURIComponent(currentTrack.mp3)) && audio.src !== currentTrack.mp3) {
+      // 1) coba URL mp3 mentah bila proxy stream gagal
+      const a = audioRef.current;
+      if (currentTrack?.mp3 && a && !a.src.endsWith(encodeURIComponent(currentTrack.mp3)) && a.src !== currentTrack.mp3) {
         console.warn("Stream proxy failed, trying direct mp3...");
-        audio.src = currentTrack.mp3;
-        audio.load();
+        a.src = currentTrack.mp3;
+        a.load();
+        return;
+      }
+      // 2) langsung gagal → fallback YouTube embed
+      if (pickedTrack?.id) {
+        console.warn("Audio playback failed, falling back to YouTube embed");
+        playViaYouTube(pickedTrack);
       } else {
         setAudioError("Audio tidak dapat diputar. Coba lagu lain.");
         setIsPlaying(false);
@@ -132,11 +255,18 @@ export default function MusicPlayer() {
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
     };
-  }, [currentTrack, tracks, pickedTrack, resolveAndPlay]);
-
-  if (hide) return null;
+  }, [currentTrack, tracks, pickedTrack, resolveAndPlay, playViaYouTube]);
 
   function togglePlay() {
+    if (mode === "yt") {
+      const p = ytRef.current;
+      if (!p) return;
+      try {
+        if (isPlaying) { p.pauseVideo(); setIsPlaying(false); }
+        else { p.playVideo(); setIsPlaying(true); }
+      } catch {}
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     const audioUrl = currentTrack?.streamUrl || currentTrack?.previewUrl || currentTrack?.mp3;
@@ -151,7 +281,8 @@ export default function MusicPlayer() {
           .then(() => setIsPlaying(true))
           .catch((err) => {
             console.warn("Play failed:", err);
-            setAudioError("Ketuk play untuk memutar lagu.");
+            if (pickedTrack?.id) playViaYouTube(pickedTrack);
+            else setAudioError("Ketuk play untuk memutar lagu.");
           });
       }
     }
@@ -203,216 +334,225 @@ export default function MusicPlayer() {
     ? { position: "fixed", left: `${pos.x}px`, top: `${pos.y}px`, bottom: "auto", right: "auto", zIndex: 290 }
     : { position: "fixed", right: "16px", bottom: "76px", zIndex: 290 };
 
-  // Thumbnail yang ditampilkan: prioritas lagu terpilih dari hasil pencarian
   const displayTrack = pickedTrack || currentTrack;
 
   return (
     <>
       <audio ref={audioRef} preload="metadata" crossOrigin="anonymous" />
-
-      {/* Floating Button */}
+      {/* Container tersembunyi untuk YouTube IFrame player (fallback pemutaran) */}
       <div
-        ref={btnRef}
-        style={btnStyle}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-      >
-        <button
-          onClick={() => setIsOpen(true)}
-          className="relative flex items-center justify-center rounded-full select-none"
-          style={{ width: 54, height: 54, background: "rgba(8,10,15,0.92)", boxShadow: "0 6px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(245,158,11,0.2)" }}
-          aria-label="Music Player"
-        >
-          <svg className="absolute inset-0" width="54" height="54" viewBox="0 0 54 54" style={{ transform: "rotate(-90deg)" }}>
-            <circle cx="27" cy="27" r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="3" />
-            <circle cx="27" cy="27" r={R} fill="none" stroke={isPlaying ? "#f59e0b" : "rgba(245,158,11,0.4)"} strokeWidth="3" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={dashOff} style={{ transition: "stroke-dashoffset 0.25s linear" }} />
-          </svg>
-          {displayTrack?.thumbnail ? (
-            <img src={displayTrack.thumbnail} alt="" className="w-8 h-8 rounded-full object-cover" />
-          ) : (
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-            </svg>
-          )}
-          {isPlaying && (
-            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full flex items-center justify-center" style={{ background: "#f59e0b" }}>
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            </span>
-          )}
-        </button>
-      </div>
+        ref={ytContainerRef}
+        aria-hidden="true"
+        style={{ position: "fixed", width: 1, height: 1, opacity: 0, pointerEvents: "none", left: -9999, top: -9999 }}
+      />
 
-      {/* Player Panel */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-[400] flex items-end justify-center"
-          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
-          onClick={(e) => { if (e.target === e.currentTarget) setIsOpen(false); }}
-        >
+      {hide ? null : (
+        <>
+          {/* Floating Button */}
           <div
-            className="w-full max-w-sm mx-4 mb-20 rounded-3xl overflow-hidden"
-            style={{ background: "#0d0f17", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 -20px 60px rgba(0,0,0,0.5)" }}
+            ref={btnRef}
+            style={btnStyle}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
           >
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.12)" }} />
-            </div>
-
-            {/* Area pemutar */}
-            <div className="px-5 pt-3 pb-5 flex flex-col items-center">
-              <img
-                src={displayTrack?.thumbnail || "/favicon.png"}
-                alt={displayTrack?.title || ""}
-                className={`w-28 h-28 rounded-2xl object-cover shadow-2xl mb-4 ${resolving ? "opacity-40 animate-pulse" : ""}`}
-                style={{ border: "1px solid rgba(245,158,11,0.2)" }}
-                onError={(e) => { e.target.src = "/favicon.png"; }}
-              />
-              <p className="text-sm font-bold text-white text-center line-clamp-1 w-full mb-0.5">
-                {displayTrack?.searchTitle || displayTrack?.title || "Cari lagu dulu"}
-              </p>
-              <p className="text-xs text-gray-400 mb-4 line-clamp-1">
-                {displayTrack?.searchAuthor || displayTrack?.author || "Hasil pencarian tampil di bawah"}
-              </p>
-
-              {resolving && (
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-4 h-4 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
-                  <p className="text-[11px] text-amber-400">Menyiapkan audio...</p>
-                </div>
+            <button
+              onClick={() => setIsOpen(true)}
+              className="relative flex items-center justify-center rounded-full select-none"
+              style={{ width: 54, height: 54, background: "rgba(8,10,15,0.92)", boxShadow: "0 6px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(245,158,11,0.2)" }}
+              aria-label="Music Player"
+            >
+              <svg className="absolute inset-0" width="54" height="54" viewBox="0 0 54 54" style={{ transform: "rotate(-90deg)" }}>
+                <circle cx="27" cy="27" r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="3" />
+                <circle cx="27" cy="27" r={R} fill="none" stroke={isPlaying ? "#f59e0b" : "rgba(245,158,11,0.4)"} strokeWidth="3" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={dashOff} style={{ transition: "stroke-dashoffset 0.25s linear" }} />
+              </svg>
+              {displayTrack?.thumbnail ? (
+                <img src={displayTrack.thumbnail} alt="" className="w-8 h-8 rounded-full object-cover" />
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                </svg>
               )}
-              {!resolving && audioError && (
-                <p className="text-[11px] text-amber-400 mb-2 text-center px-4">{audioError}</p>
+              {isPlaying && (
+                <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full flex items-center justify-center" style={{ background: "#f59e0b" }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                </span>
               )}
-
-              <div className="w-full mb-1">
-                <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-                  <div className="h-full rounded-full" style={{ width: `${progress * 100}%`, background: "linear-gradient(to right,#f59e0b,#ef4444)", transition: "width 0.25s linear" }} />
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-[10px]" style={{ color: "#6b7280" }}>{formatTime(currentTime)}</span>
-                  <span className="text-[10px]" style={{ color: "#6b7280" }}>{formatTime(duration || currentTrack?.duration || 0)}</span>
-                </div>
-              </div>
-
-              {/* Kontrol: prev, play, next */}
-              <div className="flex items-center gap-5 mt-2">
-                <button
-                  onClick={playPrev}
-                  disabled={!pickedTrack || tracks.indexOf(pickedTrack) <= 0}
-                  className="transition-transform active:scale-95 disabled:opacity-30"
-                  aria-label="Lagu sebelumnya"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#e5e7eb"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2" height="16" rx="1"/></svg>
-                </button>
-
-                <button
-                  onClick={togglePlay}
-                  disabled={!currentTrack || resolving}
-                  className="w-12 h-12 rounded-full flex items-center justify-center transition-transform active:scale-95 disabled:opacity-40"
-                  style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)", boxShadow: "0 4px 20px rgba(245,158,11,0.4)" }}
-                >
-                  {isPlaying ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-                  ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
-                  )}
-                </button>
-
-                <button
-                  onClick={playNext}
-                  disabled={!pickedTrack || tracks.indexOf(pickedTrack) >= tracks.length - 1}
-                  className="transition-transform active:scale-95 disabled:opacity-30"
-                  aria-label="Lagu berikutnya"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#e5e7eb"><polygon points="5,4 15,12 5,20"/><rect x="17" y="4" width="2" height="16" rx="1"/></svg>
-                </button>
-              </div>
-            </div>
-
-            {/* Search bar */}
-            <div className="px-4 pb-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const q = searchInput.trim();
-                  if (q) doSearch(q);
-                }}
-                className="flex gap-2 mt-3"
-              >
-                <div className="relative flex-1">
-                  <svg className="absolute left-3 top-1/2 -translate-y-1/2" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                  <input
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    placeholder="Cari lagu..."
-                    className="w-full text-sm pl-8 pr-3 py-2 rounded-xl outline-none text-gray-300 placeholder-gray-600"
-                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={searching || !searchInput.trim()}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold text-white transition-opacity disabled:opacity-50 flex-shrink-0"
-                  style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)" }}
-                >
-                  {searching ? "..." : "Cari"}
-                </button>
-              </form>
-            </div>
-
-            {/* Daftar hasil pencarian */}
-            {tracks.length > 0 && (
-              <div className="px-4 pb-3 space-y-0.5 max-h-56 overflow-y-auto hide-scrollbar">
-                <p className="text-[10px] uppercase tracking-widest mb-2" style={{ color: "#4b5563" }}>
-                  Hasil ({tracks.length})
-                </p>
-                {tracks.map((t) => {
-                  const active = pickedTrack && pickedTrack.id === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => resolveAndPlay(t)}
-                      disabled={resolving}
-                      className="w-full flex items-center gap-3 p-2 rounded-xl transition-all text-left disabled:opacity-60"
-                      style={{
-                        background: active ? "rgba(245,158,11,0.1)" : "transparent",
-                        border: `1px solid ${active ? "rgba(245,158,11,0.2)" : "transparent"}`,
-                      }}
-                    >
-                      <img
-                        src={t.thumbnail || "/favicon.png"}
-                        alt=""
-                        className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
-                        onError={(e) => { e.target.src = "/favicon.png"; }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-white line-clamp-1">{t.title}</p>
-                        <p className="text-[10px]" style={{ color: "#6b7280" }}>
-                          {t.author}{t.duration_timestamp ? ` · ${t.duration_timestamp}` : ""}{t.views ? ` · ${t.views}` : ""}
-                        </p>
-                      </div>
-                      {active && resolving ? (
-                        <span className="w-4 h-4 rounded-full border-2 border-amber-400 border-t-transparent animate-spin flex-shrink-0" />
-                      ) : active && isPlaying ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" className="flex-shrink-0 animate-pulse">
-                          <rect x="3" y="9" width="3" height="12" rx="1"/><rect x="9" y="5" width="3" height="16" rx="1"/><rect x="15" y="7" width="3" height="14" rx="1"/>
-                        </svg>
-                      ) : (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#6b7280" className="flex-shrink-0">
-                          <polygon points="5,3 19,12 5,21"/>
-                        </svg>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <button onClick={() => setIsOpen(false)} className="w-full py-3 text-xs text-center transition-colors hover:text-white" style={{ color: "#4b5563", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-              Tutup
             </button>
           </div>
-        </div>
+
+          {/* Player Panel */}
+          {isOpen && (
+            <div
+              className="fixed inset-0 z-[400] flex items-end justify-center"
+              style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+              onClick={(e) => { if (e.target === e.currentTarget) setIsOpen(false); }}
+            >
+              <div
+                className="w-full max-w-sm mx-4 mb-20 rounded-3xl overflow-hidden"
+                style={{ background: "#0d0f17", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 -20px 60px rgba(0,0,0,0.5)" }}
+              >
+                <div className="flex justify-center pt-3 pb-1">
+                  <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.12)" }} />
+                </div>
+
+                {/* Area pemutar */}
+                <div className="px-5 pt-3 pb-5 flex flex-col items-center">
+                  <img
+                    src={displayTrack?.thumbnail || "/favicon.png"}
+                    alt={displayTrack?.title || ""}
+                    className={`w-28 h-28 rounded-2xl object-cover shadow-2xl mb-4 ${resolving ? "opacity-40 animate-pulse" : ""}`}
+                    style={{ border: "1px solid rgba(245,158,11,0.2)" }}
+                    onError={(e) => { e.target.src = "/favicon.png"; }}
+                  />
+                  <p className="text-sm font-bold text-white text-center line-clamp-1 w-full mb-0.5">
+                    {displayTrack?.searchTitle || displayTrack?.title || "Cari lagu dulu"}
+                  </p>
+                  <p className="text-xs text-gray-400 mb-4 line-clamp-1">
+                    {displayTrack?.searchAuthor || displayTrack?.author || "Hasil pencarian tampil di bawah"}
+                  </p>
+
+                  {resolving && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-4 h-4 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+                      <p className="text-[11px] text-amber-400">Menyiapkan audio...</p>
+                    </div>
+                  )}
+                  {!resolving && audioError && (
+                    <p className="text-[11px] text-amber-400 mb-2 text-center px-4">{audioError}</p>
+                  )}
+
+                  <div className="w-full mb-1">
+                    <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                      <div className="h-full rounded-full" style={{ width: `${progress * 100}%`, background: "linear-gradient(to right,#f59e0b,#ef4444)", transition: "width 0.25s linear" }} />
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-[10px]" style={{ color: "#6b7280" }}>{formatTime(currentTime)}</span>
+                      <span className="text-[10px]" style={{ color: "#6b7280" }}>{formatTime(duration || currentTrack?.duration || 0)}</span>
+                    </div>
+                  </div>
+
+                  {/* Kontrol: prev, play, next */}
+                  <div className="flex items-center gap-5 mt-2">
+                    <button
+                      onClick={playPrev}
+                      disabled={!pickedTrack || tracks.indexOf(pickedTrack) <= 0}
+                      className="transition-transform active:scale-95 disabled:opacity-30"
+                      aria-label="Lagu sebelumnya"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="#e5e7eb"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2" height="16" rx="1"/></svg>
+                    </button>
+
+                    <button
+                      onClick={togglePlay}
+                      disabled={resolving || (!currentTrack && mode !== "yt")}
+                      className="w-12 h-12 rounded-full flex items-center justify-center transition-transform active:scale-95 disabled:opacity-40"
+                      style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)", boxShadow: "0 4px 20px rgba(245,158,11,0.4)" }}
+                    >
+                      {isPlaying ? (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={playNext}
+                      disabled={!pickedTrack || tracks.indexOf(pickedTrack) >= tracks.length - 1}
+                      className="transition-transform active:scale-95 disabled:opacity-30"
+                      aria-label="Lagu berikutnya"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="#e5e7eb"><polygon points="5,4 15,12 5,20"/><rect x="17" y="4" width="2" height="16" rx="1"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search bar */}
+                <div className="px-4 pb-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const q = searchInput.trim();
+                      if (q) doSearch(q);
+                    }}
+                    className="flex gap-2 mt-3"
+                  >
+                    <div className="relative flex-1">
+                      <svg className="absolute left-3 top-1/2 -translate-y-1/2" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                      <input
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        placeholder="Cari lagu..."
+                        className="w-full text-sm pl-8 pr-3 py-2 rounded-xl outline-none text-gray-300 placeholder-gray-600"
+                        style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={searching || !searchInput.trim()}
+                      className="px-3 py-2 rounded-xl text-xs font-semibold text-white transition-opacity disabled:opacity-50 flex-shrink-0"
+                      style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)" }}
+                    >
+                      {searching ? "..." : "Cari"}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Daftar hasil pencarian */}
+                {tracks.length > 0 && (
+                  <div className="px-4 pb-3 space-y-0.5 max-h-56 overflow-y-auto hide-scrollbar">
+                    <p className="text-[10px] uppercase tracking-widest mb-2" style={{ color: "#4b5563" }}>
+                      Hasil ({tracks.length})
+                    </p>
+                    {tracks.map((t) => {
+                      const active = pickedTrack && pickedTrack.id === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => resolveAndPlay(t)}
+                          disabled={resolving}
+                          className="w-full flex items-center gap-3 p-2 rounded-xl transition-all text-left disabled:opacity-60"
+                          style={{
+                            background: active ? "rgba(245,158,11,0.1)" : "transparent",
+                            border: `1px solid ${active ? "rgba(245,158,11,0.2)" : "transparent"}`,
+                          }}
+                        >
+                          <img
+                            src={t.thumbnail || "/favicon.png"}
+                            alt=""
+                            className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
+                            onError={(e) => { e.target.src = "/favicon.png"; }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-white line-clamp-1">{t.title}</p>
+                            <p className="text-[10px]" style={{ color: "#6b7280" }}>
+                              {t.author}{t.duration_timestamp ? ` · ${t.duration_timestamp}` : ""}{t.views ? ` · ${t.views}` : ""}
+                            </p>
+                          </div>
+                          {active && resolving ? (
+                            <span className="w-4 h-4 rounded-full border-2 border-amber-400 border-t-transparent animate-spin flex-shrink-0" />
+                          ) : active && isPlaying ? (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" className="flex-shrink-0 animate-pulse">
+                              <rect x="3" y="9" width="3" height="12" rx="1"/><rect x="9" y="5" width="3" height="16" rx="1"/><rect x="15" y="7" width="3" height="14" rx="1"/>
+                            </svg>
+                          ) : (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="#6b7280" className="flex-shrink-0">
+                              <polygon points="5,3 19,12 5,21"/>
+                            </svg>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <button onClick={() => setIsOpen(false)} className="w-full py-3 text-xs text-center transition-colors hover:text-white" style={{ color: "#4b5563", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  Tutup
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </>
   );
