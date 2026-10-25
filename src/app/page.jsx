@@ -20,7 +20,7 @@ async function fetchManga(sort, limit = 18) {
       next: { revalidate: 300 },
     });
     const data = await res.json();
-    const { items } = filterBlocked(data.data || [], (m) => m?.attributes?.title?.en || Object.values(m?.attributes?.title || {})[0]);
+    const { items } = await filterBlocked(data.data || [], (m) => m?.attributes?.title?.en || Object.values(m?.attributes?.title || {})[0]);
     return items;
   } catch {
     return [];

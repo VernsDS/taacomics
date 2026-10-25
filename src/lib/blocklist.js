@@ -4,6 +4,18 @@ import path from "node:path";
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "blocklist.json");
 
+import { fetchPanelData } from "@/lib/adminData";
+
+/** Keyword dari admin panel (remote) atau file lokal. */
+export async function fetchBlocklistKeywords() {
+  const panel = await fetchPanelData("/api/public/blocklist");
+  if (panel && Array.isArray(panel.items)) {
+    return panel.items.map((x) => String(x).toLowerCase()).filter(Boolean);
+  }
+  return readBlocklist();
+}
+
+/** Fungsi tetap sinkron (readBlocklist) untuk fallback lokal; integrasi utama pakai async di bawah. */
 export function readBlocklist() {
   try {
     const raw = fs.readFileSync(DATA_FILE, "utf8");
@@ -26,8 +38,8 @@ export function writeBlocklist(items) {
 }
 
 /** Filter daftar manga (MangaDex atau Komiku) berdasarkan kata/judul yang di-hide admin. */
-export function filterBlocked(list, getTitle) {
-  const blocked = readBlocklist();
+export async function filterBlocked(list, getTitle) {
+  const blocked = await fetchBlocklistKeywords();
   if (blocked.length === 0) return { items: Array.isArray(list) ? list : [], hidden: 0 };
   const items = (Array.isArray(list) ? list : []).filter((m) => {
     const title = String(getTitle(m) || "").toLowerCase();

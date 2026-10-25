@@ -5,6 +5,17 @@ import crypto from "node:crypto";
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "custom_chapters.json");
 
+import { fetchPanelData } from "@/lib/adminData";
+
+/** Data chapter custom: admin panel remote (jika diset) atau file lokal. */
+async function readSourceAll() {
+  const panel = await fetchPanelData("/api/public/custom-chapters");
+  if (panel && panel.chapters && typeof panel.chapters === "object") {
+    return panel.chapters;
+  }
+  return readAll();
+}
+
 function readAll() {
   try {
     const raw = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
@@ -36,10 +47,11 @@ function sanitizeSlug(raw) {
     .replace(/[^a-z0-9-]/g, "");
 }
 
-export function getCustomChaptersForSlug(rawSlug) {
+export async function getCustomChaptersForSlug(rawSlug) {
   const slug = sanitizeSlug(rawSlug);
   if (!slug) return [];
-  return (readAll()[slug] || [])
+  const all = await readSourceAll();
+  return (all[slug] || [])
     .slice()
     .sort((a, b) => (a.number || 0) - (b.number || 0))
     .map((ch) => ({
@@ -51,11 +63,12 @@ export function getCustomChaptersForSlug(rawSlug) {
     }));
 }
 
-export function findCustomChapter(rawSlug, chapterId) {
+export async function findCustomChapter(rawSlug, chapterId) {
   const slug = sanitizeSlug(rawSlug);
   const id = String(chapterId || "").replace(/^custom-/, "").replace(/[^a-z0-9_-]/gi, "");
-  const direct = (readAll()[slug] || []).find((ch) => ch.id === id)
-    || Object.values(readAll())
+  const all = await readSourceAll();
+  const direct = (all[slug] || []).find((ch) => ch.id === id)
+    || Object.values(all)
       .flat()
       .find((ch) => ch.id === id) || null;
   if (!direct) return null;

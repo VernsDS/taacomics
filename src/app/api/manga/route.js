@@ -30,7 +30,7 @@ export async function GET(request) {
     });
 
     const data = await res.json();
-    const { items, hidden } = filterBlocked(data.data || [], (m) => m?.attributes?.title?.en || Object.values(m?.attributes?.title || {})[0]);
+    const { items, hidden } = await filterBlocked(data.data || [], (m) => m?.attributes?.title?.en || Object.values(m?.attributes?.title || {})[0]);
     data.data = items;
     if (hidden > 0 && typeof data.total === "number") data.total = Math.max(0, data.total - hidden);
     return NextResponse.json(data);

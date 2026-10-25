@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fetchPanelData } from "@/lib/adminData";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "maintenance.json");
@@ -7,6 +8,11 @@ const DATA_FILE = path.join(DATA_DIR, "maintenance.json");
 export const DEFAULT_MESSAGE = "MAAF SERVER SEDANG DALAM MASA PEMELIHARAAN";
 
 export async function readMaintenance() {
+  // Prioritas: admin panel remote → file lokal → env MAINTENANCE
+  const panel = await fetchPanelData("/api/public/site-status");
+  if (panel) {
+    return { enabled: Boolean(panel.enabled), message: panel.message || DEFAULT_MESSAGE };
+  }
   let enabled = false;
   let message = DEFAULT_MESSAGE;
   try {

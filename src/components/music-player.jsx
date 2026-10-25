@@ -14,7 +14,9 @@ export default function MusicPlayer() {
   const [isOpen, setIsOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [tracks, setTracks] = useState([]);
-  const [currentTrack, setCurrentTrack] = useState(null);
+  const [currentTrack, setCurrentTrack] = useState(null); // hasil resolve (ada mp3)
+  const [pickedTrack, setPickedTrack] = useState(null); // item dari daftar hasil
+  const [resolving, setResolving] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -28,32 +30,71 @@ export default function MusicPlayer() {
 
   const hide = pathname === "/about" || pathname?.startsWith("/search");
 
+  /* ---------- Search: daftar hasil dari YouTube ---------- */
   const doSearch = useCallback(async (q) => {
+    if (!q.trim()) return;
     setSearching(true);
     setAudioError(null);
     try {
-      const res = await fetch(`/api/music?q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(q)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const list = data.results || (data.result ? [data.result] : []);
+      const list = data.results || [];
       setTracks(list);
-      if (list[0]) {
-        setCurrentTrack(list[0]);
-        setIsPlaying(false);
-      }
+      if (list.length === 0) setAudioError("Lagu tidak ditemukan. Coba kata lain.");
+      else setIsOpen(true);
     } catch (e) {
       console.error("music search err", e);
-      setAudioError("Gagal memuat lagu. Coba lagi.");
+      setAudioError("Gagal mencari lagu. Coba lagi.");
     } finally {
       setSearching(false);
     }
   }, []);
 
-  useEffect(() => {
-    doSearch("Inni uhibbuka");
-  }, [doSearch]);
+  /* ---------- Resolve: ambil mp3 untuk lagu terpilih lewat /api/music ---------- */
+  const resolveAndPlay = useCallback(async (track) => {
+    if (!track) return;
+    setPickedTrack(track);
+    setResolving(true);
+    setAudioError(null);
+    try {
+      const q = [track.title, track.author].filter(Boolean).join(" ");
+      const params = new URLSearchParams({ q });
+      if (track.id && /^[A-Za-z0-9_-]{11}$/.test(track.id)) params.set("v", track.id);
+      const res = await fetch(`/api/music?${params}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const resolved = data.result || data.results?.[0];
+      if (!resolved?.streamUrl) throw new Error("no mp3");
+      setCurrentTrack({ ...resolved, searchTitle: track.title, searchAuthor: track.author });
+    } catch (e) {
+      console.error("music resolve err", e);
+      setCurrentTrack(null);
+      setAudioError("Gagal memuat audio lagu ini. Coba lagu lain.");
+    } finally {
+      setResolving(false);
+    }
+  }, []);
 
-  // Audio event listeners
+  /* ---------- Auto-play saat lagu selesai di-resolve ---------- */
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!currentTrack || !audio) return;
+    const audioUrl = currentTrack.streamUrl || currentTrack.previewUrl || currentTrack.mp3;
+    if (!audioUrl) return;
+    setAudioError(null);
+    audio.src = audioUrl;
+    audio.load();
+    audio
+      .play()
+      .then(() => setIsPlaying(true))
+      .catch(() => setIsPlaying(false));
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
+  }, [currentTrack]);
+
+  /* ---------- Audio listeners ---------- */
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -61,14 +102,18 @@ export default function MusicPlayer() {
       setCurrentTime(audio.currentTime);
       setProgress(audio.duration ? audio.currentTime / audio.duration : 0);
     };
-    const onLoaded = () => {
-      setDuration(audio.duration || 0);
-      setAudioError(null);
+    const onLoaded = () => setDuration(audio.duration || 0);
+    const onEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+      setCurrentTime(0);
+      // Auto next dalam daftar
+      const idx = tracks.findIndex((t) => pickedTrack && t.id === pickedTrack.id);
+      if (idx !== -1 && tracks[idx + 1]) resolveAndPlay(tracks[idx + 1]);
     };
-    const onEnded = () => { setIsPlaying(false); setProgress(0); setCurrentTime(0); };
     const onError = () => {
-      // Try direct mp3 URL as fallback if stream proxy failed
-      if (currentTrack?.mp3 && audio.src !== currentTrack.mp3) {
+      // Fallback: URL mp3 mentah kalau proxy stream gagal
+      if (currentTrack?.mp3 && !audio.src.endsWith(encodeURIComponent(currentTrack.mp3)) && audio.src !== currentTrack.mp3) {
         console.warn("Stream proxy failed, trying direct mp3...");
         audio.src = currentTrack.mp3;
         audio.load();
@@ -87,21 +132,7 @@ export default function MusicPlayer() {
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
     };
-  }, [currentTrack]);
-
-  // Load track when currentTrack changes
-  useEffect(() => {
-    const audioUrl = currentTrack?.streamUrl || currentTrack?.previewUrl || currentTrack?.mp3;
-    if (!audioUrl || !audioRef.current) return;
-    const audio = audioRef.current;
-    setAudioError(null);
-    audio.src = audioUrl;
-    audio.load();
-    setProgress(0);
-    setCurrentTime(0);
-    setDuration(0);
-    setIsPlaying(false);
-  }, [currentTrack]);
+  }, [currentTrack, tracks, pickedTrack, resolveAndPlay]);
 
   if (hide) return null;
 
@@ -110,10 +141,6 @@ export default function MusicPlayer() {
     if (!audio) return;
     const audioUrl = currentTrack?.streamUrl || currentTrack?.previewUrl || currentTrack?.mp3;
     if (!audioUrl) return;
-    if (!audio.src || audio.src === window.location.href) {
-      audio.src = audioUrl;
-      audio.load();
-    }
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
@@ -124,10 +151,20 @@ export default function MusicPlayer() {
           .then(() => setIsPlaying(true))
           .catch((err) => {
             console.warn("Play failed:", err);
-            setAudioError("Klik play untuk memutar lagu.");
+            setAudioError("Ketuk play untuk memutar lagu.");
           });
       }
     }
+  }
+
+  function playNext() {
+    const idx = tracks.findIndex((t) => pickedTrack && t.id === pickedTrack.id);
+    if (idx !== -1 && tracks[idx + 1]) resolveAndPlay(tracks[idx + 1]);
+  }
+
+  function playPrev() {
+    const idx = tracks.findIndex((t) => pickedTrack && t.id === pickedTrack.id);
+    if (idx > 0) resolveAndPlay(tracks[idx - 1]);
   }
 
   function onTouchStart(e) {
@@ -166,6 +203,9 @@ export default function MusicPlayer() {
     ? { position: "fixed", left: `${pos.x}px`, top: `${pos.y}px`, bottom: "auto", right: "auto", zIndex: 290 }
     : { position: "fixed", right: "16px", bottom: "76px", zIndex: 290 };
 
+  // Thumbnail yang ditampilkan: prioritas lagu terpilih dari hasil pencarian
+  const displayTrack = pickedTrack || currentTrack;
+
   return (
     <>
       <audio ref={audioRef} preload="metadata" crossOrigin="anonymous" />
@@ -188,8 +228,8 @@ export default function MusicPlayer() {
             <circle cx="27" cy="27" r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="3" />
             <circle cx="27" cy="27" r={R} fill="none" stroke={isPlaying ? "#f59e0b" : "rgba(245,158,11,0.4)"} strokeWidth="3" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={dashOff} style={{ transition: "stroke-dashoffset 0.25s linear" }} />
           </svg>
-          {currentTrack?.thumbnail ? (
-            <img src={currentTrack.thumbnail} alt="" className="w-8 h-8 rounded-full object-cover" />
+          {displayTrack?.thumbnail ? (
+            <img src={displayTrack.thumbnail} alt="" className="w-8 h-8 rounded-full object-cover" />
           ) : (
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
@@ -218,35 +258,57 @@ export default function MusicPlayer() {
               <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.12)" }} />
             </div>
 
-            {currentTrack ? (
-              <div className="px-5 pt-3 pb-5 flex flex-col items-center">
-                <img
-                  src={currentTrack.thumbnail || "/favicon.png"}
-                  alt={currentTrack.title || ""}
-                  className="w-28 h-28 rounded-2xl object-cover shadow-2xl mb-4"
-                  style={{ border: "1px solid rgba(245,158,11,0.2)" }}
-                  onError={(e) => { e.target.src = "/favicon.png"; }}
-                />
-                <p className="text-sm font-bold text-white text-center line-clamp-1 w-full mb-0.5">{currentTrack.title || "Unknown Track"}</p>
-                <p className="text-xs text-gray-400 mb-4 line-clamp-1">{currentTrack.author || "Unknown Artist"}</p>
+            {/* Area pemutar */}
+            <div className="px-5 pt-3 pb-5 flex flex-col items-center">
+              <img
+                src={displayTrack?.thumbnail || "/favicon.png"}
+                alt={displayTrack?.title || ""}
+                className={`w-28 h-28 rounded-2xl object-cover shadow-2xl mb-4 ${resolving ? "opacity-40 animate-pulse" : ""}`}
+                style={{ border: "1px solid rgba(245,158,11,0.2)" }}
+                onError={(e) => { e.target.src = "/favicon.png"; }}
+              />
+              <p className="text-sm font-bold text-white text-center line-clamp-1 w-full mb-0.5">
+                {displayTrack?.searchTitle || displayTrack?.title || "Cari lagu dulu"}
+              </p>
+              <p className="text-xs text-gray-400 mb-4 line-clamp-1">
+                {displayTrack?.searchAuthor || displayTrack?.author || "Hasil pencarian tampil di bawah"}
+              </p>
 
-                {audioError && (
-                  <p className="text-[11px] text-amber-400 mb-2 text-center px-4">{audioError}</p>
-                )}
-
-                <div className="w-full mb-1">
-                  <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-                    <div className="h-full rounded-full" style={{ width: `${progress * 100}%`, background: "linear-gradient(to right,#f59e0b,#ef4444)", transition: "width 0.25s linear" }} />
-                  </div>
-                  <div className="flex justify-between mt-1">
-                    <span className="text-[10px]" style={{ color: "#6b7280" }}>{formatTime(currentTime)}</span>
-                    <span className="text-[10px]" style={{ color: "#6b7280" }}>{formatTime(duration || currentTrack.duration || 0)}</span>
-                  </div>
+              {resolving && (
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-4 h-4 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+                  <p className="text-[11px] text-amber-400">Menyiapkan audio...</p>
                 </div>
+              )}
+              {!resolving && audioError && (
+                <p className="text-[11px] text-amber-400 mb-2 text-center px-4">{audioError}</p>
+              )}
+
+              <div className="w-full mb-1">
+                <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                  <div className="h-full rounded-full" style={{ width: `${progress * 100}%`, background: "linear-gradient(to right,#f59e0b,#ef4444)", transition: "width 0.25s linear" }} />
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-[10px]" style={{ color: "#6b7280" }}>{formatTime(currentTime)}</span>
+                  <span className="text-[10px]" style={{ color: "#6b7280" }}>{formatTime(duration || currentTrack?.duration || 0)}</span>
+                </div>
+              </div>
+
+              {/* Kontrol: prev, play, next */}
+              <div className="flex items-center gap-5 mt-2">
+                <button
+                  onClick={playPrev}
+                  disabled={!pickedTrack || tracks.indexOf(pickedTrack) <= 0}
+                  className="transition-transform active:scale-95 disabled:opacity-30"
+                  aria-label="Lagu sebelumnya"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#e5e7eb"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2" height="16" rx="1"/></svg>
+                </button>
 
                 <button
                   onClick={togglePlay}
-                  className="w-12 h-12 rounded-full flex items-center justify-center mt-2 transition-transform active:scale-95"
+                  disabled={!currentTrack || resolving}
+                  className="w-12 h-12 rounded-full flex items-center justify-center transition-transform active:scale-95 disabled:opacity-40"
                   style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)", boxShadow: "0 4px 20px rgba(245,158,11,0.4)" }}
                 >
                   {isPlaying ? (
@@ -255,40 +317,25 @@ export default function MusicPlayer() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
                   )}
                 </button>
+
+                <button
+                  onClick={playNext}
+                  disabled={!pickedTrack || tracks.indexOf(pickedTrack) >= tracks.length - 1}
+                  className="transition-transform active:scale-95 disabled:opacity-30"
+                  aria-label="Lagu berikutnya"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#e5e7eb"><polygon points="5,4 15,12 5,20"/><rect x="17" y="4" width="2" height="16" rx="1"/></svg>
+                </button>
               </div>
-            ) : (
-              <div className="px-5 py-8 text-center">
-                {searching ? (
-                  <>
-                    <div className="w-8 h-8 rounded-full border-2 border-amber-400 border-t-transparent animate-spin mx-auto mb-3" />
-                    <p className="text-sm text-gray-400">Memuat lagu...</p>
-                  </>
-                ) : (
-                  <>
-                    <svg className="mx-auto mb-3" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5" strokeLinecap="round">
-                      <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-                    </svg>
-                    <p className="text-sm text-gray-500">{audioError || "Tidak ada lagu"}</p>
-                    {audioError && (
-                      <button
-                        onClick={() => doSearch("Inni uhibbuka")}
-                        className="mt-3 text-xs px-4 py-2 rounded-xl text-white font-semibold"
-                        style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)" }}
-                      >
-                        Coba Lagi
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
+            </div>
 
             {/* Search bar */}
             <div className="px-4 pb-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  doSearch(searchInput.trim() || "Inni uhibbuka");
+                  const q = searchInput.trim();
+                  if (q) doSearch(q);
                 }}
                 className="flex gap-2 mt-3"
               >
@@ -304,7 +351,7 @@ export default function MusicPlayer() {
                 </div>
                 <button
                   type="submit"
-                  disabled={searching}
+                  disabled={searching || !searchInput.trim()}
                   className="px-3 py-2 rounded-xl text-xs font-semibold text-white transition-opacity disabled:opacity-50 flex-shrink-0"
                   style={{ background: "linear-gradient(135deg,#f59e0b,#ef4444)" }}
                 >
@@ -313,36 +360,51 @@ export default function MusicPlayer() {
               </form>
             </div>
 
+            {/* Daftar hasil pencarian */}
             {tracks.length > 0 && (
-              <div className="px-4 pb-3 space-y-0.5 max-h-44 overflow-y-auto hide-scrollbar">
-                <p className="text-[10px] uppercase tracking-widest mb-2" style={{ color: "#4b5563" }}>Hasil</p>
-                {tracks.map((t, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setCurrentTrack(t); setIsPlaying(false); setAudioError(null); }}
-                    className="w-full flex items-center gap-3 p-2 rounded-xl transition-all text-left"
-                    style={{
-                      background: currentTrack === t ? "rgba(245,158,11,0.1)" : "transparent",
-                      border: currentTrack === t ? "1px solid rgba(245,158,11,0.2)" : "1px solid transparent",
-                    }}
-                  >
-                    <img
-                      src={t.thumbnail || "/favicon.png"}
-                      alt=""
-                      className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
-                      onError={(e) => { e.target.src = "/favicon.png"; }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-white line-clamp-1">{t.title || "Unknown Track"}</p>
-                      <p className="text-[10px]" style={{ color: "#6b7280" }}>{t.author || "Unknown Artist"}</p>
-                    </div>
-                    {currentTrack === t && isPlaying && (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" className="flex-shrink-0 animate-pulse">
-                        <rect x="3" y="9" width="3" height="12" rx="1"/><rect x="9" y="5" width="3" height="16" rx="1"/><rect x="15" y="7" width="3" height="14" rx="1"/>
-                      </svg>
-                    )}
-                  </button>
-                ))}
+              <div className="px-4 pb-3 space-y-0.5 max-h-56 overflow-y-auto hide-scrollbar">
+                <p className="text-[10px] uppercase tracking-widest mb-2" style={{ color: "#4b5563" }}>
+                  Hasil ({tracks.length})
+                </p>
+                {tracks.map((t) => {
+                  const active = pickedTrack && pickedTrack.id === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => resolveAndPlay(t)}
+                      disabled={resolving}
+                      className="w-full flex items-center gap-3 p-2 rounded-xl transition-all text-left disabled:opacity-60"
+                      style={{
+                        background: active ? "rgba(245,158,11,0.1)" : "transparent",
+                        border: `1px solid ${active ? "rgba(245,158,11,0.2)" : "transparent"}`,
+                      }}
+                    >
+                      <img
+                        src={t.thumbnail || "/favicon.png"}
+                        alt=""
+                        className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
+                        onError={(e) => { e.target.src = "/favicon.png"; }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-white line-clamp-1">{t.title}</p>
+                        <p className="text-[10px]" style={{ color: "#6b7280" }}>
+                          {t.author}{t.duration_timestamp ? ` · ${t.duration_timestamp}` : ""}{t.views ? ` · ${t.views}` : ""}
+                        </p>
+                      </div>
+                      {active && resolving ? (
+                        <span className="w-4 h-4 rounded-full border-2 border-amber-400 border-t-transparent animate-spin flex-shrink-0" />
+                      ) : active && isPlaying ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" className="flex-shrink-0 animate-pulse">
+                          <rect x="3" y="9" width="3" height="12" rx="1"/><rect x="9" y="5" width="3" height="16" rx="1"/><rect x="15" y="7" width="3" height="14" rx="1"/>
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#6b7280" className="flex-shrink-0">
+                          <polygon points="5,3 19,12 5,21"/>
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
 

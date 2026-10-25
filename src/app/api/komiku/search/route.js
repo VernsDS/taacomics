@@ -8,7 +8,7 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q") || "";
   try {
-    const { items } = filterBlocked(await searchKomiku(q), (m) => m?.title);
+    const { items } = await filterBlocked(await searchKomiku(q), (m) => m?.title);
     return NextResponse.json({ ok: true, data: items });
   } catch (err) {
     return NextResponse.json({ ok: true, data: [], error: err?.message || "mirror error" });

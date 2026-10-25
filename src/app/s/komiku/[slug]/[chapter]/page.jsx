@@ -25,7 +25,7 @@ export default async function KomikuChapterPage({ params }) {
   try {
     data = await getKomikuChapter(chapter);
   } catch {
-    const custom = findCustomChapter(slug, chapter);
+    const custom = await findCustomChapter(slug, chapter);
     if (custom && custom.images.length > 0) {
       data = custom;
     } else {
@@ -34,7 +34,7 @@ export default async function KomikuChapterPage({ params }) {
   }
 
   if (!Array.isArray(data.images) || data.images.length === 0) {
-    const custom = findCustomChapter(slug, chapter);
+    const custom = await findCustomChapter(slug, chapter);
     if (custom && custom.images.length > 0) {
       data = custom;
     } else {

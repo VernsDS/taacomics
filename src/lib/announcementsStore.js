@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { fetchPanelData } from "@/lib/adminData";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "announcements.json");
@@ -41,6 +42,9 @@ async function fetchRemote() {
 }
 
 export async function readAnnouncements() {
+  // Prioritas: admin panel remote → file lokal → ANNOUNCEMENTS_URL → default
+  const panel = normalize(await fetchPanelData("/api/public/announcements"));
+  if (panel) return panel;
   try {
     const raw = fs.readFileSync(DATA_FILE, "utf8");
     return normalize(JSON.parse(raw));

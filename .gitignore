@@ -9,3 +9,4 @@ dev_server.log
 .env.*
 .DS_Store
 Thumbs.db
+.env*

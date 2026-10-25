@@ -25,12 +25,12 @@ export default async function KomikuDetailPage({ params }) {
   try {
     detail = await getKomikuDetail(slug);
   } catch {
-    customChapters = getCustomChaptersForSlug(slug);
+    customChapters = await getCustomChaptersForSlug(slug);
     customOnly = customChapters.length > 0;
     if (!customOnly) notFound();
   }
   if (!customOnly && detail) {
-    customChapters = getCustomChaptersForSlug(slug);
+    customChapters = await getCustomChaptersForSlug(slug);
   }
 
   const mergedChapters = detail ? [...detail.chapters] : [];
