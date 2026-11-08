@@ -1,0 +1,6 @@
+# TaaComics - https://taamanga.my.id
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://taamanga.my.id/sitemap.xml

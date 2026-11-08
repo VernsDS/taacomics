@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "id": "a_welcome",
+      "title": "Selamat datang di TaaComics",
+      "body": "Baca manga, manhua & manhwa gratis dengan prioritas chapter bahasa Indonesia.",
+      "level": "info",
+      "active": true,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "a_e6ce8e65730c",
+      "title": "Masalah",
+      "body": "Jika ada masalah pada chapter komik, harap hubungi admin di bagian about",
+      "level": "info",
+      "active": true,
+      "createdAt": "2026-10-23T14:59:04.571Z"
+    }
+  ]
+}

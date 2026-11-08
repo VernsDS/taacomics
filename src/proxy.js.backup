@@ -1,0 +1,57 @@
+import { NextResponse } from "next/server";
+
+const ADMIN_HOSTS = new Set([
+  "admin.taamanga.my.id",
+  "admin.localhost:3000",
+  "admin.localhost",
+]);
+
+/**
+ * Lightweight Next.js 16 proxy (zero remote network fetch per request).
+ * 1. Rewrites requests on admin.taamanga.my.id to the /admin route group.
+ * 2. Blocks direct access to /admin/* from the public main domain (returns 404).
+ * 3. Redirects public traffic to /maintenance only when MAINTENANCE=1 env is set.
+ */
+export default function proxy(request) {
+  const host = (request.headers.get("host") || "").toLowerCase().trim();
+  const { pathname } = request.nextUrl;
+
+  const isAdminHost = ADMIN_HOSTS.has(host) || host.startsWith("admin.");
+
+  if (isAdminHost) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.next();
+    }
+    const url = request.nextUrl.clone();
+    if (!pathname.startsWith("/admin")) {
+      url.pathname = pathname === "/" ? "/admin" : `/admin${pathname}`;
+      return NextResponse.rewrite(url);
+    }
+    return NextResponse.next();
+  }
+
+  // Block direct access to /admin path on the public main domain
+  if (pathname.startsWith("/admin")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/not-found";
+    return NextResponse.rewrite(url, { status: 404 });
+  }
+
+  // Zero-network maintenance check via environment flag
+  if (
+    (process.env.MAINTENANCE === "1" || process.env.MAINTENANCE === "true") &&
+    pathname !== "/maintenance"
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/maintenance";
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|favicon.png|robots.txt|sitemap.xml|logo.jpg|icon.png|banner.png|manifest.json).*)",
+  ],
+};
